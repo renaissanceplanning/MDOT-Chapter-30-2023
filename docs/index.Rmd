@@ -1,0 +1,52 @@
+---
+title: "Overview of Project"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message=FALSE, error=FALSE, warning=FALSE)
+require(tmap)
+require(sf)
+require(rpgcolorsr)
+tmap_mode("view")
+```
+
+Project 24-29 would add new fixed route bus service between the Clarksburg Outlets and Bethesda Metro Station (South Entrance) in Montgomery County, MD.
+
+**Figure 1. Proposed Montgomery County Service**
+
+```{r route overview, out.width = "100%"}
+
+route_file <- "K:/Models/MDOT_MMA/Chapter30_Scoring/Ch30_2023/GTFS/New_Project_Feeds/flash_brt_2023/shapes/rpg_shape.shp"
+stops_file <- "K:/Models/MDOT_MMA/Chapter30_Scoring/Ch30_2023/GTFS/New_Project_Feeds/flash_brt_2023/shapes/rpg_stops.shp"
+
+routes <- st_read(route_file, 
+                  quiet = TRUE) %>% 
+  st_transform(2248)
+
+stops <- st_read(stops_file, 
+                 quiet = TRUE) %>% 
+  st_transform(2248)
+
+pal <- rpg_color_pal("rpg_colors")(4)
+
+tm_shape(routes) +
+tm_lines("surface", palette = pal, lwd = 3,
+         title.col = "Service Type") +
+tm_shape(stops) +
+tm_dots(col = "#8400a8", id = "Name", 
+        popup.vars = "stop_name", 
+        labels = "Name", size = 0.1) +
+tm_basemap ("Esri.WorldGrayCanvas")
+
+```
+
+**Report Table of Contents**
+
+-   [Overview](index.html)
+-   [Coding Assumptions](coding-assumptions.html)
+-   [Network Review Results](network-review-results.html)
+-   [Reasonableness of Results](reasonableness-of-results.html)
+-   [Mapping and Findings](mapping-and-findings.html)

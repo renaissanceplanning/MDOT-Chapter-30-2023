@@ -1,0 +1,202 @@
+---
+title: "Network Review Results"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, error = FALSE)
+require(sf)
+require(tmap)
+require(rmapshaper)
+require(dplyr)
+require(rpgcolorsr)
+require(tidyr)
+require(ggplot2)
+library(kableExtra)
+```
+
+```{r}
+stops_file <- "K:/Models/MDOT_MMA/Chapter30_Scoring/Ch30_2023/GTFS/New_Project_Feeds/flash_brt_2023/shapes/rpg_stops.shp"
+
+stops <- st_read(stops_file, 
+                 quiet = TRUE) %>% 
+  st_transform(2248)
+```
+
+
+## Network Dataset Configuration
+
+The multi-modal network is composed of five features classes:
+
+* “TransitLines” represents vehicle trips between transit stops;
+
+* “Stops” represents transit stops served by transit vehicles;
+
+* “Streets_UseThisOne” represents the local street network for access to/egress from transit stops;
+
+* “Stops_Snapped2Street” represents each transit stop as a location “snapped” to the “Streets_UseThisOne” features;
+
+* “Connectors_Stops2Street” represents the connections from the L3_HWY features to the transit Stop locations via the Stops_Snapped2Street junctions. 
+
+These features are grouped into three “connectivity groups” that enforce appropriate routing for transit network problems. Modeled paths must begin on the streets (“Streets_UseThisOne”) network (column 1) and can proceed to the transit lines (column 3) via the Connectors_Stops2Streets features (column 2). The network edge features are connected through the Stops (column 2-column 3) and the Stops_Snapped2Streets (column 1-column 2) node features. Figure 6 below shows the connectivity topological rules applied to the development of the build scenario multimodal network.
+
+Travel times between zones are computed using a travel time evaluator, setup for the build scenario multimodal network in Network Analyst as shown in Figure 7. A 3 mph (264 feet per minute) walk speed is assumed and the transit evaluator computes time-of-departure-specific transit travel times using the GTFS schedule.
+
+**Figure 6. Coding Assumptions**
+![Figure 6. Coding Assumptions](network_connectivity_policy.png)
+
+**Figure 7. Network Minutes Evaluators**
+![Figure 7. Network Minutes Evaluators](network_minutes_evaluators.png)
+
+## Connectivity Tests
+
+There are several steps required to create a multi-modal network, presenting opportunities for user error or technical anomalies to mis-represent network connectivity. To test the connectivity and usability of the proposed servcie in the network, two quality control tests were performed: Service area analysis and routing analysis. These tests are described below. All test cases are based on an assumed peak morning service on a typical Wednesday. 
+
+### Service Area Test
+
+Figures 8 and 9 show the result of the service area analysis. The maps visualize travel time isochrones for a single location within the project study area for the base network and the build network with the proposed fixed route bus service. Service is tested in the southbound direction, from Montgomery College Rockville.
+
+A simple check that the isochrones expand as the project provides additional service and that the expansion is intuitive given the nature of the project is sufficient to confirm that the project is appropriately integrated into the base multimodal network.
+
+A comparison between the service areas shows a measurable increase of service relative to the location used in the test, when the new service is introduced.
+
+These changes confirm that Project 24-29 is appropriately integrated into the base multimodal network.
+
+**Figure 8. Base Service Area**
+
+```{r base service area, out.width = "100%"}
+
+tmap_mode("view")
+
+base_service_area_sf <- st_read("K:\\Models\\MDOT_MMA\\Chapter30_Scoring\\Ch30_2023\\QC\\Base_service_area.shp", 
+                                quiet = TRUE) %>% 
+  st_transform(2248) %>% 
+  ms_simplify() %>% 
+  mutate(category = paste0(FromBreak, " - ", ToBreak))
+
+
+routes <- st_read("K:\\Models\\MDOT_MMA\\Chapter30_Scoring\\Ch30_2023\\QC\\Base_routes.shp", 
+                 quiet = TRUE) %>% 
+  select(Name)
+
+cats <- n_distinct(base_service_area_sf$category)
+
+pal <- rpg_color_pal("rpg_colors")(cats)
+
+tm_shape(base_service_area_sf) +
+  tm_polygons("ToBreak", title = "Transit Travel Time (min)", n = cats, 
+              palette = pal, lwd = 0, alpha = .5, id = "category") +
+  tm_shape(dplyr::filter(routes, Name == "S")) +
+  tm_lines(col = "#8400a8", size = 0.05, id = "Base Route Test") +
+  tm_shape(stops) +
+  tm_dots(col = "black", id = "stop_name", popup.vars = "stop_name", 
+          labels = "stop_name", size = 0.025, alpha = 0.5) +
+  tm_basemap ("Esri.WorldGrayCanvas") +
+  tm_add_legend(labels = "Route Test - SB",
+                col = "#8400a8")
+ 
+
+```
+
+**Figure 9. Build Service Area**
+
+```{r build service area, out.width = "100%"}
+
+tmap_mode("view")
+
+build_service_area_sf <- st_read("K:\\Models\\MDOT_MMA\\Chapter30_Scoring\\Ch30_2023\\QC\\Build_service_area.shp", 
+                                 quiet = TRUE) %>% 
+  st_transform(2248) %>% 
+  ms_simplify() %>% 
+  mutate(category = paste0(FromBreak, " - ", ToBreak))
+
+routes <- st_read("K:\\Models\\MDOT_MMA\\Chapter30_Scoring\\Ch30_2023\\QC\\Base_routes.shp", 
+                 quiet = TRUE) %>% 
+  select(Name) %>% 
+  st_transform(2248)
+
+cats <- n_distinct(build_service_area_sf$category)
+
+pal <- rpg_color_pal("rpg_colors")(cats)
+
+  tm_shape(build_service_area_sf) +
+  tm_polygons("ToBreak", title = "Transit Travel Time (min)", 
+              n = cats, palette = pal, lwd = 0, 
+              alpha = .5, id = "category") +
+  tm_shape(dplyr::filter(routes, Name == "S")) +
+  tm_lines(col = "#8400a8", size = 0.05, id = "Build Route Test") +
+  tm_shape(stops) +
+  tm_dots(col = "black", id = "stop_name", popup.vars = "stop_name", 
+          labels = "stop_name", size = 0.01, alpha = 0.5) +
+  tm_basemap ("Esri.WorldGrayCanvas") +
+  tm_add_legend(labels = "Route Test - SB",
+                col = "#8400a8")
+
+```
+
+### Route Test
+
+Figures 10 compares twp shortest path routing tests, each between two points. Tests are conducted between southbound, from Montgomery College Rockville to Cordell, and northbound, from Montgomery College Rockville to Clarksburg Outlets.
+
+The tests confirms the network is utilizing the new path the service creates. In the no-build network, the shortest path between Clarksburg Outlets and Cordell Ave is a more circuitous path with higher travel times. In the build network, the shortest path is a direct bus route between these points made available by the new transit service. The build network provides shorter, more direct transit service, indicating that the new transit service is being routed.
+
+The test also shows a travel time reduction after the addition of Project 24-29. The northbound test no-build route takes approximately 79 minutes, to traverse, while the build route takes 68 minutes. The southbound test no-build route takes approximately 44 minutes, to traverse, while the build route takes 34 minutes. This travel-time test further confirmed that Project 24-29 is appropriately integrated into the multimodal network.
+
+**Figure 10. Route test comparison**
+
+```{r route test, out.width = "100%"}
+
+tmap_mode("view")
+
+base_route <- st_read("K:\\Models\\MDOT_MMA\\Chapter30_Scoring\\Ch30_2023\\QC\\Base_routes.shp", quiet = TRUE) %>% 
+st_transform(2248) %>% 
+rename(direction = Name)
+base_route$Name <- "Base Route"
+
+build_route <- st_read("K:\\Models\\MDOT_MMA\\Chapter30_Scoring\\Ch30_2023\\QC\\Build_routes.shp", 
+                 quiet = TRUE) %>% 
+st_transform(2248) %>% 
+rename(direction = Name)
+build_route$Name <- "Build Route"
+
+routes <- bind_rows(base_route, build_route) %>% 
+  mutate(direction == case_when(direction == "N" ~ "Northbound Route Test",
+                              TRUE ~ "Southbound Route Test"),
+         name_merge = paste0(Name, " - ", direction))
+routes_table <- routes %>% 
+  st_drop_geometry() %>% 
+  transmute(Direction = direction,
+            Name = Name,
+            Transit_Time = Total_Tran,
+            name_merge = name_merge)
+
+pal <- rpg_color_pal("logo")(4)
+
+tm_shape(routes) +
+tm_lines(col = "name_merge", palette = pal, lwd=3, title.col = "Routing Tests")
+```
+
+**Figure 11. Route test travel time: build vs. no-build**
+
+```{r}
+ggplot(routes_table, aes(fill=Name, y=Transit_Time, x=Direction)) + 
+    geom_bar(position="dodge", stat="identity") +
+    xlab("Test Route") + ylab("Travel Time (min.)") +
+    scale_fill_rpg(palette = "logo") +
+    theme_minimal()
+```
+
+**Table 5. Route test travel time: build vs. no-build**
+
+```{r}
+kbl(dplyr::select(routes_table, -name_merge), col.names = c("Test Route Direction", "Scenario", "Travel Time (min.)"), 
+            digits = 2) %>% 
+            kable_styling(full_width = F)
+```
+
+
+
+
+

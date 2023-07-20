@@ -1,0 +1,25 @@
+
+name: "mdot-chapter-30-2023"  
+author: "Renaissance Planning"  
+output_dir: "docs"  
+output:  
+  html_document:  
+    self_contained: no  
+    theme: flatly  
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    css:  K:/Tools/Website Styling/RPG_Bootstrap_Arial.css
+navbar:  
+  title: "MDOT Chapter 30: Project 24-29 (Montgomery County)"
+  left:
+    - text: "Overview"
+      href: index.html
+    - text: "Coding Assumptions"
+      href: coding-assumptions.html   
+    - text: "Network Review Results"
+      href: network-review-results.html
+    - text: "Reasonableness of Results"
+      href: reasonableness-of-results.html
+    - text: "Mapping and Findings"
+      href: mapping-and-findings.html

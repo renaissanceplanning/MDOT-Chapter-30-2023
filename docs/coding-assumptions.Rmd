@@ -1,0 +1,194 @@
+---
+title: "Coding Assumptions"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+require(sf)
+require(tmap)
+require(tmaptools)
+require(dplyr)
+require(kableExtra)
+require(readr)
+require(rpgcolorsr)
+options(scipen=999)
+```
+
+The analysis of Project 24-29 required developing General Transit Feed Specification (GTFS) files to model the proposed fixed route bus service.
+
+Project 24-29 is comprised of new fixed service bus routes, serving the following overlapping segments between Clarksburg Outlets and Bethesda Metro Station (South Entrance):
+
+1. Clarksburg Outlets to Montgomery College Rockville. A 10-minute headway would be maintained during peak hours.
+
+2. Germantown Transit Center to Montgomery College Rockville. A 10-minute headway would be maintained during peak hours.
+ 
+3. Lake Forest Transit Center to Grosvenor Strathmore (Metro). A 10-minute headway would be maintained during peak hours.
+
+4. Montgomery College Rockville to Bethesda (Metro). A 10-minute headway would be maintained during peak hours.
+
+Total runtime from Clarksburg Outlets and Bethesda Metro Station is 100 minutes.
+
+
+## Alignment
+
+Service on both corridors would operate in a mixture of the following roadway configurations: mixed traffic, reversible BRT lanes, two BRT lanes, and one-way BRT lane. The following maps depicts station locations and route alignment developed to calculate travel distances and travel times for coding the proposed service into a GTFS feed.
+
+```{r}
+
+tmap_mode("view")
+
+route_file <- "K:/Models/MDOT_MMA/Chapter30_Scoring/Ch30_2023/GTFS/New_Project_Feeds/flash_brt_2023/shapes/rpg_shape.shp"
+stops_file <- "K:/Models/MDOT_MMA/Chapter30_Scoring/Ch30_2023/GTFS/New_Project_Feeds/flash_brt_2023/shapes/rpg_stops.shp"
+
+routes <- st_read(route_file, 
+                  quiet = TRUE) %>% 
+  st_transform(2248)
+
+stops <- st_read(stops_file, 
+                 quiet = TRUE) %>% 
+  st_transform(2248)
+
+pal <- rpg_color_pal("rpg_colors")(4)
+
+tm_shape(routes) +
+tm_lines("surface", palette = pal, lwd = 3,
+         title.col = "Service Type") +
+tm_shape(stops) +
+tm_dots(col = "#8400a8", id = "Name", 
+        popup.vars = "stop_name", 
+        labels = "Name", size = 0.1) +
+tm_basemap ("Esri.WorldGrayCanvas")
+
+```
+
+Details of how the proposed service is represented in GTFS are provided below by describing four key tables in the feed: Stops.txt, Trips.txt, Stop_times.txt, and Frequencies.txt. Other tables in the new 24-29 feed are based on standard tables defined in the Chapter 30 Transit Accessibility Scoring Guide ("[GTFS feed validation](https://accessdocs.readthedocs.io/en/latest/quality-assurance.html#gtfs-feed-validation)" section) and are not described here.
+
+## Attributes
+
+The attributes of the base multimodal network were modified through the addition of the newly developed GTFS feed modeling Project 24-29. The details of how Project 24-29 was represented in GTFS are provided below by describing four key tables of the feeds: Stops.txt, Trips.txt, Stop_times.txt, and Frequencies.txt.
+
+Other tables in the new project feed are based on standard tables defined in the Chapter 30 Transit Accessibility Scoring Guide ("Standard GTFS Tables" section) and are not described here.
+
+### Stops.txt
+
+**Table 1. Stops Table**
+
+```{r, results='asis'}
+stops_table <- read_csv("K:/Models/MDOT_MMA/Chapter30_Scoring/Ch30_2023/GTFS/New_Project_Feeds/flash_brt_2023/feed_v1/stops.txt")
+kbl(stops_table) %>%  kable_styling()
+```
+
+### Trips.txt (vehicle-trip enumeration)
+
+The trips file represents a single route with a seven-day travel profile. The scoring methodology is based around peak AM travel times. The feed was only developed to represent this time period and the associated frequencies and characteristics.
+
+**Table 2. Trips Table**
+
+```{r results='asis'}
+trips_table <- read_csv("K:/Models/MDOT_MMA/Chapter30_Scoring/Ch30_2023/GTFS/New_Project_Feeds/flash_brt_2023/feed_v1/trips.txt")
+kbl(trips_table) %>% kable_styling()
+```
+
+### Stop_times.txt (transit schedule)
+
+The stop times table was developed by determining an average travel speed based on the travel time and approximate length of the line.
+
+**Table 3. Stops Times Table**
+
+```{r results='asis'}
+stoptimes_table <- read_csv("K:/Models/MDOT_MMA/Chapter30_Scoring/Ch30_2023/GTFS/New_Project_Feeds/flash_brt_2023/feed_v1/stop_times.txt")
+kbl(stoptimes_table) %>%  kable_styling()
+```
+
+### Frequencies.txt (frequency of recurring trips)
+
+A frequencies table was developed to model the headways of the line during weekday AM peak travel times. The table defines a start and end time for a headway, with each headway associated with a trip ID. The headways are provided in seconds. The trip IDs link the headway times to the individual trips that comprise the route described in the trips.txt file. When frequencies table is used, the stop times file defines a template of stop sequences and travel times between stops, and the frequencies table defines the interval of recurrence for each trip following the stop times template.
+
+**Table 4. Frequencies Table**
+
+```{r results='asis'}
+frequencies_table <- read_csv("K:/Models/MDOT_MMA/Chapter30_Scoring/Ch30_2023/GTFS/New_Project_Feeds/flash_brt_2023/feed_v1/frequencies.txt")
+kbl(frequencies_table) %>%  kable_styling()
+```
+
+### Network
+
+The following maps depict the GTFS feed for both base service as well as proposed service represented as a routable network. While the alignment was used to develop route distances and speeds, the resulting GTFS-derived network represents transit service as straight lines between stops, with the associated scheduling information that was built around the specific alignments associated with each segment.
+
+```{r network read in}
+
+stops_file <- "K:/Models/MDOT_MMA/Chapter30_Scoring/Ch30_2023/GTFS/New_Project_Feeds/flash_brt_2023/shapes/rpg_stops.shp"
+
+stops <- st_read(stops_file, 
+                 quiet = TRUE) %>% 
+  st_transform(2248)
+
+general_area <- st_bbox(stops) %>%
+  st_as_sfc() %>% 
+  st_buffer(1320)
+
+build_street_network <- st_read("K:/Models/MDOT_MMA/Chapter30_Scoring/Ch30_2023/Networks/Build.gdb", "Streets_UseThisOne", quiet=TRUE) %>% 
+  st_transform(2248) %>% 
+  tmaptools::crop_shape(general_area)
+
+build_transit_network <- st_read("K:/Models/MDOT_MMA/Chapter30_Scoring/Ch30_2023/Networks/Build.gdb", "TransitLines", quiet=TRUE) %>% 
+  st_transform(2248) %>% 
+  tmaptools::crop_shape(general_area)
+
+base_street_network <- st_read("K:/Models/MDOT_MMA/Chapter30_Scoring/Ch30_2023/Networks/Base.gdb", "Streets_UseThisOne", quiet=TRUE) %>% 
+  st_transform(2248) %>% 
+  tmaptools::crop_shape(general_area)
+
+base_transit_network <- st_read("K:/Models/MDOT_MMA/Chapter30_Scoring/Ch30_2023/Networks/Base.gdb", "TransitLines", quiet=TRUE) %>% 
+  st_transform(2248) %>% 
+  tmaptools::crop_shape(general_area)
+
+
+```
+
+**Figure 2. Base Network**
+
+```{r base network}
+
+tmap_mode("plot")
+tm_shape(base_street_network) +
+tm_lines(col = "#F29C20") +
+tm_shape(base_transit_network) +
+tm_lines(col = "#3fbfba", lwd = 1.5) +
+tm_add_legend(type = "line", col = "#F29C20", 
+              labels = "Street Network") +
+tm_add_legend(type = "line", col = "#3fbfba", 
+              labels = "Transit Network") +
+tm_add_legend(type = "symbol", col = "#8400a8", 
+              labels = "Flash BRT Stops") +
+tm_shape(stops) +
+tm_dots(col = "#8400a8", id = "Name", popup.vars = "Name", 
+        labels = "Flash BRT Stops", size = 0.1) +
+tm_layout(legend.outside = TRUE, title.color = "#58585B", 
+          legend.text.color = "#58585B", attr.color = "#58585B")
+
+```
+
+**Figure 3. Build Network**
+
+```{r build network}
+
+tmap_mode("plot")
+tm_shape(build_street_network) +
+tm_lines(col = "#F29C20") +
+tm_shape(build_transit_network) +
+tm_lines(col = "#3fbfba", lwd = 1.5) +
+tm_add_legend(type = "line", col = "#F29C20", 
+              labels = "Street Network") +
+tm_add_legend(type = "line", col = "#3fbfba", 
+              labels = "Transit Network") +
+tm_add_legend(type = "symbol", col = "#8400a8", 
+              labels = "Flash BRT Stops") +
+tm_shape(stops) +
+tm_dots(col = "#8400a8", id = "Name", popup.vars = "Name", 
+        labels = "US29 BRT Stops", size = 0.1) +
+tm_layout(legend.outside = TRUE, title.color = "#58585B", 
+          legend.text.color = "#58585B", attr.color = "#58585B")
+
+```

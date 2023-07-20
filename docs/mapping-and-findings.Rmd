@@ -1,0 +1,147 @@
+---
+title: "Mapping and Findings"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+require(sf)
+require(tmap)
+require(tmaptools)
+require(rmapshaper)
+require(dplyr)
+require(kableExtra)
+require(readr)
+require(nngeo)
+require(tidyr)
+require(rpgcolorsr)
+options(scipen=999)
+
+```
+
+```{r}
+stops_file <- "K:/Models/MDOT_MMA/Chapter30_Scoring/Ch30_2023/GTFS/New_Project_Feeds/flash_brt_2023/shapes/rpg_stops.shp"
+
+stops <- st_read(stops_file, 
+                 quiet = TRUE) %>% 
+  st_transform(2248)
+
+general_area <- st_bbox(stops) %>%
+  st_as_sfc() %>% 
+  st_buffer(1320)
+
+route_file <- "K:/Models/MDOT_MMA/Chapter30_Scoring/Ch30_2023/GTFS/New_Project_Feeds/flash_brt_2023/shapes/rpg_shape.shp"
+
+routes <- st_read(route_file, 
+                  quiet = TRUE) %>% 
+  st_transform(2248)
+
+```
+
+## Network
+
+### Project Links and Stops
+
+**Figure 14. Project Links and Stops**
+
+```{r route overview}
+
+tmap_mode("view")
+
+pal <- rpg_color_pal("rpg_colors")(4)
+
+tm_shape(routes) +
+tm_lines("surface", palette = pal, lwd = 3,
+         title.col = "Service Type") +
+tm_shape(stops) +
+tm_dots(col = "#8400a8", id = "Name", 
+        popup.vars = "stop_name", 
+        labels = "Name", size = 0.1) +
+tm_basemap ("Esri.WorldGrayCanvas")
+
+```
+
+## TAZ
+
+The MMA results show an increase in the number of jobs accessible by transit when compared to the no build option. In the build scenario, portions of the study area see an increase in job accessibility ranging from 0 to 296,840.
+
+```{r read in score results}
+
+score_summary <- read_csv("K:/Models/MDOT_MMA/Chapter30_Scoring/Ch30_2023/MMA_scores/summarise/summarized_scores.csv")
+
+zones <- st_read("K:/Models/MDOT_MMA/Chapter30_Scoring/Ch30_2023/Land_use/Lvl_2_Zones_12192017.shp",
+                 quiet = T) %>% 
+  dplyr::select(LVL_2_NEW, ACRES, FIPS, COUNTY, MD_REGION) %>% 
+  st_transform(2248) %>% 
+  ms_simplify() %>% 
+  st_make_valid()
+
+score_summary_sf <- left_join(zones, score_summary,
+                              by = c("LVL_2_NEW" = "origin")) %>% 
+  filter(study_zone == "yes")
+
+study_area_boundary <- ms_dissolve(filter(score_summary_sf, study_zone == "yes")) %>% 
+  st_make_valid() %>% 
+  nngeo::st_remove_holes(.) %>% 
+  st_make_valid()
+
+```
+
+### Project Study Area
+
+**Figure 15. Project Study Area**
+
+```{r, study area}
+
+tm_shape(filter(score_summary_sf, study_zone == "yes")) +
+tm_borders(col = "#8400a8", lwd = 1.5) + tm_fill(alpha = 0.1, col = "#8400a8") +
+tm_add_legend(type = "fill", col  = "#8400a8", labels = "Study Area Boundary") +
+tm_basemap ("Esri.WorldStreetMap")
+
+```
+
+### Accessibility Changes
+
+**Figure 16. Change in Accessibility between No-Build and Build scenarios in Study Area**
+
+```{r mma changes}
+
+pal <- rpg_color_pal("rpg_colors")(6)
+tmap_options(check.and.fix = TRUE)
+tm_shape(score_summary_sf) +
+tm_polygons("change", 
+            title = "Change in Accessibility to Jobs", 
+            breaks = c(0, 1, 500, 3000, 10000, 50000, 100000), palette = pal, 
+            lwd = 0.5, alpha = 0.9, 
+            id = "change", textNA = "NA") +
+tm_shape(study_area_boundary) +
+tm_borders(col = "#8400a8", lwd = 1.5) +
+tm_add_legend(type = "fill", col  = "#8400a8", 
+              labels = "Study Area Boundary") +
+tm_shape(stops) +
+tm_dots(col = "#58585B", id = "stop_name", 
+        popup.vars = "stop_name", 
+        labels = "Project Stops", scale = 1,
+        border.col = "white") +
+tm_basemap ("Esri.WorldGrayCanvas")
+```
+
+## Project findings
+
+As shown in Figure 16, the largest increases in job access occur in the TAZs in closest proximity to new stops in the build scenario. The addition of project increased the number of accessible jobs for the general population by 1,890. There is also an accessibility increases for the disadvantaged population of 1,890. The following table summarizes final findings for Project 24-29.
+
+
+**Table 7. Project Finding**
+
+```{r}
+
+final_scores <- read_csv("K:/Models/MDOT_MMA/Chapter30_Scoring/Ch30_2023/Documentation/final_scores.csv")
+
+kbl(final_scores, col.names = c("Measure", "2023"), 
+            digits = 3, format.args = list(big.mark = ",",
+  scientific = FALSE)) %>%
+    kable_styling()
+
+```
